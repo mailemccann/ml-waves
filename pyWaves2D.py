@@ -1,6 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from copy import deepcopy
+import pickle
+import os
 
 '''
 This script contains functions that solve the nonlinear 
@@ -20,7 +22,7 @@ INPUT
     courant - the courant number, controls the time step
 As an example call, use:  >>CP2_Heun_iter(1,1,50,50,100,1,0.5)
 '''
-def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
+def solveNLSW_BOUS(disp_plot=True, save_output = False): #dx,dy,endx,endy,endt,h,courant
     # Set plot = False if you don't want to display the surface plot
 
     ho = 1. 
@@ -204,13 +206,78 @@ def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
         P_NSW[:,-1,1] = P_NSW[:,-2,1]
         Q_NSW[:,-1,1] = -Q_NSW[:,-2,1]
 
+        if save_output:
+            # Only save these values once
+            xname = loc + 'x_1.pickle'
+            yname = loc + 'y_1.pickle'
+            hname = loc + 'h_1.pickle'
+
+            # Save NLSW values
+            Pname = loc + 'P_1.pickle'
+            Qname = loc + 'Q_1.pickle'
+            etaname = loc + 'eta_1.pickle'
+            uname = loc + 'u_1.pickle'
+            vname = loc + 'v_1.pickle'
+
+            # Save difference (Bouss-NLSW) values
+            Pdiffname = loc + 'Pdiff_1.pickle'
+            Qdiffname = loc + 'Qdiff_1.pickle'
+            etadiffname = loc + 'etadiff_1.pickle'
+
+            Pdiff = P[:,:,1] - P_NSW[:,:,1]
+            Qdiff = Q[:,:,1] - Q_NSW[:,:,1]
+            eta_diff = eta[:,:,1] - eta_NSW[:,:,1]
+
+            if n>0:
+                dstackSavePickle(Pname, P[:,:,1])
+                dstackSavePickle(Pdiffname, Pdiff)
+                dstackSavePickle(Qname, Q[:,:,1])
+                dstackSavePickle(Qdiffname, Qdiff)
+                dstackSavePickle(uname, Us[:,:,1])
+                dstackSavePickle(vname, Vs[:,:,1])
+                dstackSavePickle(etaname, eta_NSW[:,:,1])
+                dstackSavePickle(etadiffname, etadiff)
+
+                pickle.dump(P[:,:,1], open(Pname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Pdiff, open(Pdiffname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Q[:,:,1], open(Qname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Qdiff, open(Qdiffname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Us[:,:,1], open(uname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Vs[:,:,1], open(vname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(eta_NSW[:,:,1], open(etaname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(eta_diff, open(etadiffname, 'wb'), protocol=4)  # dump the first one
+            else:
+                # Only save once 
+                pickle.dump(x, open(xname, 'wb'), protocol=4)
+                pickle.dump(y, open(yname, 'wb'), protocol=4)
+                pickle.dump(h, open(hname, 'wb'), protocol=4)
+
+                # Initialize other files
+                pickle.dump(P_NSW[:,:,1], open(Pname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Pdiff, open(Pdiffname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Q_NSW[:,:,1], open(Qname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Qdiff, open(Qdiffname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Us[:,:,1], open(uname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(Vs[:,:,1], open(vname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(eta_NSW[:,:,1], open(etaname, 'wb'), protocol=4)  # dump the first one
+                pickle.dump(eta_diff, open(etadiffname, 'wb'), protocol=4)  # dump the first one
+
+            loc = '"C:\\Users\\mccan\\Documents\\Projects\\ML-Boussinesq\\2D_Data"'
+            eta_NSW[:,:,1]
+            P_NSW[:,:,1]
+            Q_NSW[:,:,1]
+            eta_NSW[:,:,1]
+            Pdiff = P[:,:,1] - P_NSW[:,:,1]
+            Qdiff = Q[:,:,1] - Q_NSW[:,:,1]
+            Pdiff = P[:,:,1] - P_NSW[:,:,1]
+
         if disp_plot:
             #if (n*dt)%1 == 0:
             # Plot 
             ax[0].cla()
             #ax.plot(x[1:-2],np.asarray(100*(Q[0,1:-2,1]-Q_NSW[0,1:-2,1])),label = '100*(Bous Q - NSW Q)')
             X, Y = np.meshgrid(x, y)
-            Z = eta_NSW[:,:,0] #P[1:(nx-2),1:(ny-2),1] #-P_NSW[1:(nx-2),1:(ny-2),1])*100
+            Z = eta_NSW[:,:,1] #P[1:(nx-2),1:(ny-2),1] #-P_NSW[1:(nx-2),1:(ny-2),1])*100
             surf0 = ax[0].plot_surface(X, Y, Z, linewidth=0, antialiased=False, cmap = 'Blues',vmin=-.1, vmax = .15)
             #ax.plot(x[1:-2],np.asarray(100*(P[1:(nx-2),int(ny/2),1]-P_NSW[1:(nx-2),int(ny/2),1])),label = '100*(Bous P - NSW P)')
             #ax.legend()
@@ -278,16 +345,14 @@ def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
         Gpn2_NSW=deepcopy(Gpn1_NSW) 
         Gpn1_NSW=deepcopy(Gpn0_NSW) 
 
-        # Check for instability
         '''
-        max_eta=max(max(eta[:,:,2])) 
+        # Check for instability
+        max_eta=max(max(eta[:,:,1])) 
         instability_threshold=0.15 
         if max_eta> instability_threshold:
-            error(['ERROR: SIMULATION GONE WILD @ t=', num2str(t(n))])
+            print(['ERROR: SIMULATION GONE WILD @ t=', str(t[n])])
+            exit()
         '''
-
-    cv2.destroyAllWindows()
-    video.release()
 
 
 def BOUS_EFGcalc(nx,ny,h,eta,P,Q,dx,dy):
@@ -509,6 +574,15 @@ def tridiag( a, b, c, f ):
 
     return y
 
+def dstackSavePickle(fname, vals):
+    '''
+    Add to already saved pickle by stacking to 3rd dimension
+    '''
+    all_vals = pickle.load(open(fname, 'rb'))             # open the existing one
+    all_frames = np.dstack((all_vals, vals))                  # append the current frame
+    pickle.dump(all_frames, open(fname, 'wb'), protocol=4)  # save the file over
+
+
 
 if __name__ == '__main__':
-    solveNLSW_BOUS(disp_plot=True)
+    solveNLSW_BOUS(disp_plot=False, save_output = True)
