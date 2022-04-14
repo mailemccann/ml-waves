@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from copy import deepcopy
 
 '''
 This script contains functions that solve the nonlinear 
@@ -21,6 +22,7 @@ As an example call, use:  >>CP2_Heun_iter(1,1,50,50,100,1,0.5)
 '''
 def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
     # Set plot = False if you don't want to display the surface plot
+
     ho = 1. 
     dx = 0.1*ho 
     dy = 0.1*ho 
@@ -38,10 +40,16 @@ def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
     ny = len(y)   # total number of grid points in y
     nt = len(t)   # total number of time steps
 
-    eta = P = Q = Us = Vs = np.zeros((nx,ny,2))   # initialize the eta, u, and v matrices (see CP#1 for explanation of this step)
+    eta = np.zeros((nx,ny,2))
+    P = np.zeros((nx,ny,2))
+    Q = np.zeros((nx,ny,2))
+    Us = np.zeros((nx,ny,2))
+    Vs = np.zeros((nx,ny,2))   # initialize the eta, u, and v matrices (see CP#1 for explanation of this step)
     h = np.ones((nx,ny))*ho
 
-    eta_NSW = P_NSW = Q_NSW = np.zeros((nx,ny,2))   # initialize the eta, u, and v matrices (see CP#1 for explanation of this step)
+    eta_NSW = np.zeros((nx,ny,2))
+    P_NSW = np.zeros((nx,ny,2))
+    Q_NSW = np.zeros((nx,ny,2))   # initialize the eta, u, and v matrices (see CP#1 for explanation of this step)
 
     # Initial condition for eta, u and v are zero everywhere for the initial condition
     amp = 0.15
@@ -49,10 +57,7 @@ def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
         for jj in range(ny):
             loc = np.sqrt((x[ii]-endx/2)**2+(y[jj]-endy/2)**2)
             eta[ii,jj,0] = amp*np.exp(-1.0*loc**2)
-
-
-    eta_previous=eta[:,:,0]
-    eta_NSW=eta
+            eta_NSW[ii,jj,0] = amp*np.exp(-1.0*loc**2)
 
     # Init Bouss variables
     Epn0=np.zeros((nx,ny)) 
@@ -114,20 +119,20 @@ def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
 
     Ay[:,-1]=0 
     By[:,-1]=1 
-    Cy[:,-1]=0 
+    Cy[:,-1]=0
 
     if disp_plot:
-        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
+        fig, ax = plt.subplots(1,3,subplot_kw={"projection": "3d"})
 
     for n in range(nt):  # start the time marching
         print('Time step ' + str(n) + ' of ' + str(nt))  # plot some information to the command window
-        
+
         # Predictor Step
         [Epn0,Fpn0,Gpn0,Fstar0,Gstar0] = BOUS_EFGcalc(nx,ny,h,eta[:,:,0],P[:,:,0],Q[:,:,0],dx,dy) 
         
         [Epn0_NSW,Fpn0_NSW,Gpn0_NSW] = NLSW_EFGcalc(nx,ny,h,eta[:,:,0],P[:,:,0],Q[:,:,0],dx,dy) 
-        
-        if n<3:
+
+        if n<2:
             for i in range(nx):
                 for j in range(ny):
                     eta[i,j,1]=eta[i,j,0]+Epn0[i,j]*dt 
@@ -148,108 +153,131 @@ def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
                     P_NSW[i,j,1]=P[i,j,0]+dt/12*(23*Fpn0_NSW[i,j]-16*Fpn1_NSW[i,j]+5*Fpn2_NSW[i,j]) 
                     Q_NSW[i,j,1]=Q[i,j,0]+dt/12*(23*Gpn0_NSW[i,j]-16*Gpn1_NSW[i,j]+5*Gpn2_NSW[i,j]) 
 
-        
         # Bous BC's
         # left wall
-        eta[0,:,1]=eta[1,:,1]
-        Us[0,:,1]=-Us[1,:,1]
-        Vs[0,:,1]=Vs[1,:,1]
+        eta[0,:,1] = eta[1,:,1]
+        Us[0,:,1] = -Us[1,:,1]
+        Vs[0,:,1] = Vs[1,:,1]
         
         #right wall
-        eta[-1,:,1]=eta[-2,:,1] 
-        Us[-1,:,1]=-Us[-2,:,1]  
-        Vs[-1,:,1]=Vs[-2,:,1] 
+        eta[-1,:,1] = eta[-2,:,1] 
+        Us[-1,:,1] = -Us[-2,:,1]  
+        Vs[-1,:,1] = Vs[-2,:,1] 
         
         #bottom wall
-        eta[:,0,1]=eta[:,1,1] 
-        Us[:,0,1]=Us[:,1,1] 
-        Vs[:,0,1]=-Vs[:,1,1] 
+        eta[:,0,1] = eta[:,1,1] 
+        Us[:,0,1]  = Us[:,1,1] 
+        Vs[:,0,1] = -Vs[:,1,1] 
         
         #top wall
-        eta[:,-1,1]=eta[:,-2,1]
-        Us[:,-1,1]=Us[:,-2,1] 
-        Vs[:,-1,1]=-Vs[:,-2,1]
+        eta[:,-1,1] = eta[:,-2,1]
+        Us[:,-1,1] = Us[:,-2,1] 
+        Vs[:,-1,1] = -Vs[:,-2,1]
 
-        # Tri-diag solver to get P from Us  
-        for j in range(ny):
-            P[:,j,1]=tridiag(Bx[:,j],Ax[:,j],Cx[:,j], Us[:,j,1]) 
+        # Tri-diag solver to get P from Us 
+        for jj in range(ny):
+            P[:,jj,1]=tridiag(Bx[:,jj],Ax[:,jj],Cx[:,jj], Us[:,jj,1]) 
          
         
         # Tri-diag solver to get Q from Vs
-        for i in range(nx):
-            Q[i,:,1]=tridiag(By[i,:],Ay[i,:],Cy[i,:], Vs[i,:,1]) 
-         
+        for ii in range(nx):
+            Q[ii,:,1]=tridiag(By[ii,:],Ay[ii,:],Cy[ii,:], Vs[ii,:,1]) 
+
         # NSW BC's
         # left wall
-        eta_NSW[0,:,1]=eta_NSW[1,:,1]
-        P_NSW[0,:,1]=-P_NSW[1,:,1]
-        Q_NSW[0,:,1]=Q_NSW[1,:,1]
+        eta_NSW[0,:,1] = eta_NSW[1,:,1]
+        P_NSW[0,:,1] = -P_NSW[1,:,1]
+        Q_NSW[0,:,1] = Q_NSW[1,:,1]
         
         #right wall
-        eta_NSW[-1,:,1]=eta_NSW[-2,:,1]
-        P_NSW[-1,:,1]=-P_NSW[-2,:,1]
-        Q_NSW[-1,:,1]=Q_NSW[-2,:,1]
+        eta_NSW[-1,:,1] = eta_NSW[-2,:,1]
+        P_NSW[-1,:,1] = -P_NSW[-2,:,1]
+        Q_NSW[-1,:,1] = Q_NSW[-2,:,1]
         
         #bottom wall
-        eta_NSW[:,0,1]=eta_NSW[:,1,1]
-        P_NSW[:,0,1]=P_NSW[:,1,1]
-        Q_NSW[:,0,1]=-Q_NSW[:,1,1]
+        eta_NSW[:,0,1] = eta_NSW[:,1,1]
+        P_NSW[:,0,1] = P_NSW[:,1,1]
+        Q_NSW[:,0,1] = -Q_NSW[:,1,1]
         
         #top wall
-        eta_NSW[:,-1,1]=eta_NSW[:,-2,1]
-        P_NSW[:,-1,1]=P_NSW[:,-2,1]
-        Q_NSW[:,-1,1]=-Q_NSW[:,-2,1]
+        eta_NSW[:,-1,1] = eta_NSW[:,-2,1]
+        P_NSW[:,-1,1] = P_NSW[:,-2,1]
+        Q_NSW[:,-1,1] = -Q_NSW[:,-2,1]
 
         if disp_plot:
+            #if (n*dt)%1 == 0:
             # Plot 
-            ax.cla()
+            ax[0].cla()
             #ax.plot(x[1:-2],np.asarray(100*(Q[0,1:-2,1]-Q_NSW[0,1:-2,1])),label = '100*(Bous Q - NSW Q)')
             X, Y = np.meshgrid(x, y)
-            Z = eta[:,:,1] #P[1:(nx-2),1:(ny-2),1] #-P_NSW[1:(nx-2),1:(ny-2),1])*100
-            surf = ax.plot_surface(X, Y, Z, linewidth=0, antialiased=False)
+            Z = eta_NSW[:,:,0] #P[1:(nx-2),1:(ny-2),1] #-P_NSW[1:(nx-2),1:(ny-2),1])*100
+            surf0 = ax[0].plot_surface(X, Y, Z, linewidth=0, antialiased=False, cmap = 'Blues',vmin=-.1, vmax = .15)
             #ax.plot(x[1:-2],np.asarray(100*(P[1:(nx-2),int(ny/2),1]-P_NSW[1:(nx-2),int(ny/2),1])),label = '100*(Bous P - NSW P)')
             #ax.legend()
             #fig.colorbar(surf, shrink=0.5, aspect=5)
-            ax.set_xlabel('x (m)')
-            ax.set_ylabel('y (m)')
-            #ax.set_ylim([-.005, .005])
-            ax.set_title('time = ' + str(np.round(n*dt,3)) + ' s')
+            ax[0].set_xlabel('x (m)')
+            ax[0].set_ylabel('y (m)')
+            ax[0].set_zlim([-.5,.2])
+            ax[0].set_title(r'$\eta NLSW')
+
+            ax[1].cla()
+            X, Y = np.meshgrid(x, y)
+            Z = eta[:,:,1] #P[1:(nx-2),1:(ny-2),1] #-P_NSW[1:(nx-2),1:(ny-2),1])*100
+            surf1 = ax[1].plot_surface(X, Y, Z, linewidth=0, antialiased=False, cmap = 'Blues', vmin=-.1, vmax = .15)
+            #fig.colorbar(surf, shrink=0.5, aspect=5)
+            ax[1].set_xlabel('x (m)')
+            ax[1].set_ylabel('y (m)')
+            ax[1].set_xlabel('x (m)')
+            ax[1].set_ylabel('y (m)')
+            ax[1].set_zlim([-.5,.2])
+            ax[1].set_title(r'$\eta Boussinesq')
+
+            ax[2].cla()
+            #X, Y = np.meshgrid(x, y)
+            Z = (P[:,:,1] -P_NSW[:,:,1])*100 #eta[:,:,1] #P[1:(nx-2),1:(ny-2),1] #-P_NSW[1:(nx-2),1:(ny-2),1])*100
+            surf2 = ax[2].plot_surface(X,Y,Z, linewidth=0, antialiased=False, cmap = 'RdBu')
+            #fig.colorbar(surf, shrink=0.5, aspect=5)
+            ax[2].set_xlabel('x (m)')
+            ax[2].set_ylabel('y (m)')
+            ax[2].set_title(r'$\delta P_Bouss - P_NLSW *100')
+
+            fig.suptitle('time = ' + str(np.round(n*dt,3)) + ' s')
             plt.pause(0.05)
-            #plt.show()
-        
+
         # Shift all data one time level back.  This is a trick that allows use to use much smaller matrix
         # sizes for these variables.  We are calculating these values at all x,y and t points, so, the "total"
         # calculated domains are nx by ny by nt.  However, since we only need two time levels to perform
         # the Eulers method, we only keep two time levels in memory.  Memory savings here are great.  For example, if
         # we to calculate 5000 time steps on grid with nx=100 and ny=100, we save 1.2 GB (gigabytes) of memory space
         # by only keeping two levels in memory.
+
         eta[:,:,0]=eta[:,:,1]
         P[:,:,0]=P[:,:,1] 
         Q[:,:,0]=Q[:,:,1]
         Us[:,:,0]=Us[:,:,1]
         Vs[:,:,0]=Vs[:,:,1]
         
-        Epn2=Epn1 
-        Epn1=Epn0 
-        Fpn2=Fpn1 
-        Fpn1=Fpn0 
-        Gpn2=Gpn1 
-        Gpn1=Gpn0 
-        Fstar2=Fstar1 
-        Fstar1=Fstar0 
-        Gstar2=Gstar1 
-        Gstar1=Gstar0 
+        Epn2=deepcopy(Epn1)
+        Epn1=deepcopy(Epn0)
+        Fpn2=deepcopy(Fpn1)
+        Fpn1=deepcopy(Fpn0) 
+        Gpn2=deepcopy(Gpn1) 
+        Gpn1=deepcopy(Gpn0) 
+        Fstar2=deepcopy(Fstar1)
+        Fstar1=deepcopy(Fstar0) 
+        Gstar2=deepcopy(Gstar1) 
+        Gstar1=deepcopy(Gstar0) 
         
         eta_NSW[:,:,0]=eta_NSW[:,:,1]
         P_NSW[:,:,0]=P_NSW[:,:,1]
         Q_NSW[:,:,0]=Q_NSW[:,:,1]
-        Epn2_NSW=Epn1_NSW 
-        Epn1_NSW=Epn0_NSW 
-        Fpn2_NSW=Fpn1_NSW 
-        Fpn1_NSW=Fpn0_NSW 
-        Gpn2_NSW=Gpn1_NSW 
-        Gpn1_NSW=Gpn0_NSW 
-        
+        Epn2_NSW=deepcopy(Epn1_NSW) 
+        Epn1_NSW=deepcopy(Epn0_NSW)
+        Fpn2_NSW=deepcopy(Fpn1_NSW)
+        Fpn1_NSW=deepcopy(Fpn0_NSW)
+        Gpn2_NSW=deepcopy(Gpn1_NSW) 
+        Gpn1_NSW=deepcopy(Gpn0_NSW) 
+
         # Check for instability
         '''
         max_eta=max(max(eta[:,:,2])) 
@@ -257,6 +285,9 @@ def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
         if max_eta> instability_threshold:
             error(['ERROR: SIMULATION GONE WILD @ t=', num2str(t(n))])
         '''
+
+    cv2.destroyAllWindows()
+    video.release()
 
 
 def BOUS_EFGcalc(nx,ny,h,eta,P,Q,dx,dy):
@@ -313,7 +344,7 @@ def BOUS_EFGcalc(nx,ny,h,eta,P,Q,dx,dy):
             else: 
                 P_x[i,j]=(P[i+1,j]-P[i-1,j])/dx/2 
                 eta_x[i,j]=(eta[i+1,j]-eta[i-1,j])/dx/2 
-                eta_xx[i,j]=(eta[i+1,j]-2.*eta[i,j]+eta[i-1,j])/dx**2
+                eta_xx[i,j]=(eta[i+1,j]-2*eta[i,j]+eta[i-1,j])/(dx**2)
             
             if j==0:
                 Q_y[i,j]=(Q[i,j+1]-Q[i,j])/dy 
@@ -326,7 +357,7 @@ def BOUS_EFGcalc(nx,ny,h,eta,P,Q,dx,dy):
             else:
                 Q_y[i,j]=(Q[i,j+1]-Q[i,j-1])/dy/2 
                 eta_y[i,j]=(eta[i,j+1]-eta[i,j-1])/dy/2 
-                eta_yy[i,j]=(eta[i,j+1]-2.*eta[i,j]+eta[i,j-1])/dy**2 
+                eta_yy[i,j]=(eta[i,j+1]-2*eta[i,j]+eta[i,j-1])/(dy**2)
 
     for i in range(nx):
         for j in range(ny):
@@ -372,11 +403,11 @@ def BOUS_EFGcalc(nx,ny,h,eta,P,Q,dx,dy):
 
 
             E[i,j]=-P_x[i,j]-Q_y[i,j]  
-            F[i,j]=-Pflux_x-Pflux_y+B*9.81*h[i,j]**3*(eta_xxx+eta_xyy)    # (note that these need to be updated for variable bathymetry)
-            G[i,j]=-Qflux_x-Qflux_y+B*9.81*h[i,j]**3*(eta_yyy+eta_xxy)     # (note that these need to be updated for variable bathymetry)
+            F[i,j]=-Pflux_x - Pflux_y + B*9.81*(h[i,j]**3)*(eta_xxx+eta_xyy)    # (note that these need to be updated for variable bathymetry)
+            G[i,j]=-Qflux_x - Qflux_y + B*9.81*(h[i,j]**3)*(eta_yyy+eta_xxy)     # (note that these need to be updated for variable bathymetry)
             
-            Fstar[i,j]=(B+1/3)*h[i,j]**2*Q_xy   #(note that these need to be updated for variable bathymetry)
-            Gstar[i,j]=(B+1/3)*h[i,j]**2*P_xy   # (note that these need to be updated for variable bathymetry)    
+            Fstar[i,j]=(B+1/3)*(h[i,j]**2)*Q_xy   #(note that these need to be updated for variable bathymetry)
+            Gstar[i,j]=(B+1/3)*(h[i,j]**2)*P_xy   # (note that these need to be updated for variable bathymetry)    
 
     return [E,F,G,Fstar,Gstar]
             
@@ -464,7 +495,7 @@ def tridiag( a, b, c, f ):
 
     n = len(f) 
     v = np.zeros((n))    
-    y = v 
+    y = np.zeros((n)) 
     w = a[0] 
     y[0] = f[0]/w 
 
@@ -473,11 +504,11 @@ def tridiag( a, b, c, f ):
         w = a[i] - b[i]*v[i-1] 
         y[i] = ( f[i] - b[i]*y[i-1])/w 
 
-    for j in range(n-2,1,-1):
+    for j in range(n-2,0,-1):
         y[j] = y[j] - v[j]*y[j+1] 
 
     return y
 
 
 if __name__ == '__main__':
-    solveNLSW_BOUS()
+    solveNLSW_BOUS(disp_plot=True)

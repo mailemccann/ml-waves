@@ -1,12 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from copy import deepcopy
 
 '''
 This script contains functions that solve the nonlinear 
 shallow water equations using Euler's method.  
 
-As set-up, 
-it gives no output, although it creates an animation plot
+As set-up, it gives no output, although it creates an animation plot
 of the free surface.
 
 INPUT
@@ -19,7 +19,7 @@ INPUT
     courant - the courant number, controls the time step
 As an example call, use:  >>CP2_Heun_iter(1,1,50,50,100,1,0.5)
 '''
-def solveNLSW_BOUS(): #dx,dy,endx,endy,endt,h,courant
+def solveNLSW_BOUS(disp_plot=True): #dx,dy,endx,endy,endt,h,courant
     ho = 1. 
     dx = 0.1*ho 
     dy = 10 
@@ -37,10 +37,16 @@ def solveNLSW_BOUS(): #dx,dy,endx,endy,endt,h,courant
     ny = len(y)   # total number of grid points in y
     nt = len(t)   # total number of time steps
 
-    eta = P = Q = Us = Vs = np.zeros((nx,ny,2))   # initialize the eta, u, and v matrices (see CP#1 for explanation of this step)
-    h = np.zeros((nx,ny)) 
+    eta = np.zeros((nx,ny,2))
+    P = np.zeros((nx,ny,2))
+    Q = np.zeros((nx,ny,2))
+    Us = np.zeros((nx,ny,2))
+    Vs = np.zeros((nx,ny,2))   # initialize the eta, u, and v matrices (see CP#1 for explanation of this step)
+    h = np.ones((nx,ny)) 
 
-    eta_NSW = P_NSW = Q_NSW = np.zeros((nx,ny,2))   # initialize the eta, u, and v matrices (see CP#1 for explanation of this step)
+    eta_NSW = np.zeros((nx,ny,2))
+    P_NSW = np.zeros((nx,ny,2))
+    Q_NSW = np.zeros((nx,ny,2))   # initialize the eta, u, and v matrices (see CP#1 for explanation of this step)
 
     # Initial condition for eta, u and v are zero everywhere for the initial condition
     amp = 0.15
@@ -48,11 +54,8 @@ def solveNLSW_BOUS(): #dx,dy,endx,endy,endt,h,courant
         for j in range(ny):
             loc = np.sqrt((x[i]-endx/2)**2) #+(y(j)-endy/2)**2)
             eta[i,j,0] = amp*np.exp(-1.0*loc**2)
+            eta_NSW[i,j,0] = amp*np.exp(-1.0*loc**2)
             h[i,j] = ho  # constant water depth
-
-
-    eta_previous=eta[:,:,0]
-    eta_NSW=eta
 
     Epn0=np.zeros((nx,ny)) 
     Epn1=np.zeros((nx,ny)) 
@@ -83,6 +86,9 @@ def solveNLSW_BOUS(): #dx,dy,endx,endy,endt,h,courant
     Bx[-1,:]=1 
     Cx[-1,:]=0 
 
+    if disp_plot:
+        fig, ax = plt.subplots(1)
+
     for n in range(nt):  # start the time marching
         print('Time step ' + str(n) + ' of ' + str(nt))  # plot some information to the command window
         
@@ -90,7 +96,7 @@ def solveNLSW_BOUS(): #dx,dy,endx,endy,endt,h,courant
         [Epn0,Fpn0,Gpn0] = BOUS_EFGcalc(nx,ny,h,eta[:,:,0],P[:,:,0],Q[:,:,0],dx,dy) 
         
         [Epn0_NSW,Fpn0_NSW,Gpn0_NSW] = NLSW_EFGcalc(nx,ny,h,eta[:,:,0],P[:,:,0],Q[:,:,0],dx,dy) 
-        
+
         if n<3:
             for i in range(nx):
                 for j in range(ny):
@@ -102,21 +108,20 @@ def solveNLSW_BOUS(): #dx,dy,endx,endy,endt,h,courant
         else:
             for i in range(nx):
                 for j in range(ny):
-                    eta[i,j,1]=eta[i,j,0]+dt/12*(23*Epn0[i,j]-16*Epn1[i,j]+5*Epn2[i,j]) 
-                    Us[i,j,1]=Us[i,j,0]+dt/12*(23*Fpn0[i,j]-16*Fpn1[i,j]+5*Fpn2[i,j]) 
+                    eta[i,j,1]=eta[i,j,0]+(dt/12)*(23*Epn0[i,j] - 16*Epn1[i,j] + 5*Epn2[i,j]) 
+                    Us[i,j,1]=Us[i,j,0]+(dt/12)*(23*Fpn0[i,j] - 16*Fpn1[i,j] + 5*Fpn2[i,j]) 
                     
-                    eta_NSW[i,j,1]=eta[i,j,0]+dt/12*(23*Epn0_NSW[i,j]-16*Epn1_NSW[i,j]+5*Epn2_NSW[i,j]) 
-                    P_NSW[i,j,1]=P[i,j,0]+dt/12*(23*Fpn0_NSW[i,j]-16*Fpn1_NSW[i,j]+5*Fpn2_NSW[i,j]) 
+                    eta_NSW[i,j,1]=eta[i,j,0]+(dt/12)*(23*Epn0_NSW[i,j] - 16*Epn1_NSW[i,j] + 5*Epn2_NSW[i,j]) 
+                    P_NSW[i,j,1]=P[i,j,0]+(dt/12)*(23*Fpn0_NSW[i,j] - 16*Fpn1_NSW[i,j] + 5*Fpn2_NSW[i,j]) 
 
-        
         # Tri-diag solver to get P from Us
         # Correct for boundaries
         Us[0,:,1]=-Us[1,:,1]
-        Us[-1,:,1]=-Us[-2,:,1] 
-        
-        for j in range(ny):
-            P[:,j,1]=tridiag(Bx[:,j],Ax[:,j],Cx[:,j], Us[:,j,1]) 
-        
+        Us[-1,:,1]=-Us[-2,:,1]
+
+        for jj in range(ny):
+            P[:,jj,1]=tridiag(Bx[:,jj],Ax[:,jj],Cx[:,jj], Us[:,jj,1]) 
+
         # enforce bc's
         eta[0,:,1]=eta[1,:,1]
         P[0,:,1]=-P[1,:,1]
@@ -128,15 +133,6 @@ def solveNLSW_BOUS(): #dx,dy,endx,endy,endt,h,courant
         eta_NSW[-1,:,1]=eta_NSW[-2,:,1]
         P_NSW[-1,:,1]=-P_NSW[-2,:,1]
 
-        # Plot 
-        plt.plot(x,np.asarray(P[:,0,1]), label = 'Bous P')
-        plt.plot(x,np.asarray(10*(P[:,0,1]-P_NSW[:,0,1])),'--', label = '10*(Bous P - NSW P)')
-        plt.pause(0.05)
-
-        plt.show()
-
-
-        
         # Shift all data one time level back.  This is a trick that allows use to use much smaller matrix
         # sizes for these variables.  We are calculating these values at all x,y and t points, so, the "total"
         # calculated domains are nx by ny by nt.  However, since we only need two time levels to perform
@@ -149,17 +145,25 @@ def solveNLSW_BOUS(): #dx,dy,endx,endy,endt,h,courant
         Us[:,:,0]=Us[:,:,1]
         Vs[:,:,0]=Vs[:,:,1]
 
-        Epn2=Epn1 
-        Epn1=Epn0 
-        Fpn2=Fpn1 
-        Fpn1=Fpn0 
+        # Plot 
+        ax.cla()
+        ax.set_title('Eta, timestep = ' + str(n*dt))
+        ax.plot(x,eta_NSW[:,0,1]) #np.asarray(P[:,0,1]), label = 'Bous P')
+        ax.set_ylim([-1,.16])
+        #plt.plot(x,np.asarray(10*(P[:,0,1]-P_NSW[:,0,1])),'--', label = '10*(Bous P - NSW P)')
+        plt.pause(0.05)
+
+        Epn2=deepcopy(Epn1)
+        Epn1=deepcopy(Epn0)
+        Fpn2=deepcopy(Fpn1)
+        Fpn1=deepcopy(Fpn0) 
         
         eta_NSW[:,:,0]=eta_NSW[:,:,1]
         P_NSW[:,:,0]=P_NSW[:,:,1]
-        Epn2_NSW=Epn1_NSW 
-        Epn1_NSW=Epn0_NSW 
-        Fpn2_NSW=Fpn1_NSW 
-        Fpn1_NSW=Fpn0_NSW 
+        Epn2_NSW=deepcopy(Epn1_NSW)
+        Epn1_NSW=deepcopy(Epn0_NSW)
+        Fpn2_NSW=deepcopy(Fpn1_NSW)
+        Fpn1_NSW=deepcopy(Fpn0_NSW)
         
         # Check for instability
         '''
@@ -194,7 +198,7 @@ def BOUS_EFGcalc(nx,ny,h,eta,P,Q,dx,dy):
 
     # group variables into temp matrices
     H=h+eta 
-    Pflux=np.square(P)/H+9.81*np.square(H)/2 
+    Pflux=np.square(P)/H + 9.81*np.square(H)/2 
 
     for i in range(nx):
         for j in range(ny):
@@ -217,7 +221,7 @@ def BOUS_EFGcalc(nx,ny,h,eta,P,Q,dx,dy):
                 eta_xxx=(eta[i+2,j]-2*eta[i+1,j]+2*eta[i-1,j]-eta[i-2,j])/(2*dx**3)    # centered
 
             E[i,j]=-P_x  
-            F[i,j]=-Pflux_x+B*9.81*h[i,j]**3*eta_xxx 
+            F[i,j]=-Pflux_x+B*9.81*h[i,j]**3*eta_xxx  
             G[i,j]=0  #-9.81*eta_y-0.5*u_sq_y-0.5*v_sq_y 
 
     return [E,F,G]
@@ -259,9 +263,9 @@ def NLSW_EFGcalc(nx,ny,h,eta,P,Q,dx,dy):
                 P_x=(P[i+1,j]-P[i-1,j])/dx/2 
                 Pflux_x=(Pflux[i+1,j]-Pflux[i-1,j])/dx/2 
 
-        E[i,j]=-P_x  
-        F[i,j]=-Pflux_x 
-        G[i,j]=0  #-9.81*eta_y-0.5*u_sq_y-0.5*v_sq_y 
+        E[i,j]= -P_x  
+        F[i,j]= -Pflux_x 
+        G[i,j]= 0  #-9.81*eta_y-0.5*u_sq_y-0.5*v_sq_y 
 
     return [E,F,G]
 
@@ -283,16 +287,16 @@ def tridiag( a, b, c, f ):
 
     n = len(f) 
     v = np.zeros((n))    
-    y = v 
+    y = np.zeros((n)) 
     w = a[0] 
     y[0] = f[0]/w 
 
-    for i in range(2,n):
+    for i in range(1,n):
         v[i-1] = c[i-1]/w 
         w = a[i] - b[i]*v[i-1] 
         y[i] = ( f[i] - b[i]*y[i-1])/w 
 
-    for j in range(n-2,1,-1):
+    for j in range(n-2,0,-1):
         y[j] = y[j] - v[j]*y[j+1] 
 
     return y
